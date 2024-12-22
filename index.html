@@ -1,1 +1,223 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Электронная успеваемость</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+        }
+        div {
+            margin-bottom: 20px;
+        }
+        input {
+            margin: 5px 0;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+        h1, h2, h3, h4 {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        // Основной JS-код для интерфейса сервиса электронной успеваемости студентов
 
+        // Класс для представления пользователя
+        class User {
+            constructor(username, password, role, info = null) {
+                this.username = username;
+                this.password = password;
+                this.role = role;
+                this.info = info;
+            }
+        }
+
+        // Класс для управления успеваемостью
+        class Performance {
+            constructor() {
+                this.data = {};
+            }
+
+            getStudentSessions(username) {
+                return this.data[username]?.sessions || {};
+            }
+
+            updateGrade(username, session, subject, grade) {
+                if (!this.data[username]) {
+                    this.data[username] = { sessions: {} };
+                }
+                if (!this.data[username].sessions[session]) {
+                    this.data[username].sessions[session] = {};
+                }
+                this.data[username].sessions[session][subject] = grade;
+            }
+
+            reset() {
+                this.data = {};
+            }
+        }
+
+        // Класс для управления приложением
+        class App {
+            constructor(users, performance) {
+                this.users = users;
+                this.performance = performance;
+                this.currentUser = null;
+            }
+
+            login(username, password) {
+                const user = this.users.find(u => u.username === username && u.password === password);
+                if (user) {
+                    this.currentUser = user;
+                    this.renderInterface();
+                } else {
+                    alert('Неверный логин или пароль');
+                }
+            }
+
+            logout() {
+                this.currentUser = null;
+                this.renderLoginForm();
+            }
+
+            renderLoginForm() {
+                document.body.innerHTML = `
+                    <div>
+                        <h1>Вход в систему</h1>
+                        <input id="username" placeholder="Логин">
+                        <input id="password" type="password" placeholder="Пароль">
+                        <button onclick="app.handleLogin()">Войти</button>
+                    </div>
+                `;
+            }
+
+            handleLogin() {
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                this.login(username, password);
+            }
+
+            renderInterface() {
+                if (this.currentUser.role === 'student') {
+                    this.renderStudentInterface();
+                } else if (this.currentUser.role === 'teacher') {
+                    this.renderTeacherInterface();
+                }
+            }
+
+            renderStudentInterface() {
+                const studentData = this.performance.getStudentSessions(this.currentUser.username);
+                const studentInfo = this.currentUser.info;
+
+                let gradesHtml = '';
+                for (const session in studentData) {
+                    gradesHtml += `<h3>Сессия ${session}</h3><ul>`;
+                    for (const subject in studentData[session]) {
+                        gradesHtml += `<li>${subject}: ${studentData[session][subject]}</li>`;
+                    }
+                    gradesHtml += '</ul>';
+                }
+
+                document.body.innerHTML = `
+                    <div>
+                        <h1>Добро пожаловать, ${studentInfo.FIO}</h1>
+                        <p>Группа: ${studentInfo.group}</p>
+                        <p>Шифр: ${studentInfo.code}</p>
+                        <h2>Результаты</h2>
+                        ${gradesHtml}
+                        <button onclick="app.logout()">Выйти</button>
+                    </div>
+                `;
+            }
+
+            renderTeacherInterface() {
+                const subjects = {
+                    '1': ['Математика', 'Физика', 'Информатика'],
+                    '2': ['Химия', 'История'],
+                    '3': ['Литература', 'Физкультура'],
+                    '4': ['Биология', 'Экономика'],
+                    '5': ['Информатика', 'Философия'],
+                    '6': ['Право', 'Социология']
+                };
+
+                let studentsHtml = '';
+                for (const student of this.users.filter(u => u.role === 'student')) {
+                    const grades = this.performance.getStudentSessions(student.username);
+                    studentsHtml += `<div><h3>${student.info.FIO}</h3>`;
+                    for (let session = 1; session <= 6; session++) {
+                        studentsHtml += `<h4>Сессия ${session}</h4><ul>`;
+                        subjects[session].forEach(subject => {
+                            const grade = grades[session]?.[subject] || '';
+                            studentsHtml += `
+                                <li>${subject}: <input data-student="${student.username}" data-session="${session}" data-subject="${subject}" value="${grade}"></li>
+                            `;
+                        });
+                        studentsHtml += '</ul>';
+                    }
+                    studentsHtml += '</div>';
+                }
+
+                document.body.innerHTML = `
+                    <div>
+                        <h1>Преподаватель</h1>
+                        ${studentsHtml}
+                        <button onclick="app.savePerformance()">Сохранить</button>
+                        <button onclick="app.resetPerformance()">Сбросить</button>
+                        <button onclick="app.logout()">Выйти</button>
+                    </div>
+                `;
+            }
+
+            savePerformance() {
+                const inputs = document.querySelectorAll('input[data-student]');
+                inputs.forEach(input => {
+                    const student = input.dataset.student;
+                    const session = input.dataset.session;
+                    const subject = input.dataset.subject;
+                    const grade = parseInt(input.value);
+                    this.performance.updateGrade(student, session, subject, grade);
+                });
+                alert('Успеваемость сохранена');
+            }
+
+            resetPerformance() {
+                this.performance.reset();
+                alert('Успеваемость сброшена');
+                this.renderTeacherInterface();
+            }
+        }
+
+        // Инициализация приложения
+        const users = [
+            new User('student1', '1234', 'student', { FIO: 'Иван Иванович Иванов', group: '101', code: 'S123', grades: {} }),
+            new User('teacher1', 'abcd', 'teacher')
+        ];
+
+        const performance = new Performance();
+        performance.data = {
+            'student1': {
+                sessions: {
+                    '1': { 'Математика': 4, 'Физика': 5 },
+                    '2': { 'Химия': 3, 'История': 4 },
+                    '3': { 'Литература': 5, 'Физкультура': 4 },
+                    '4': { 'Биология': 4, 'Экономика': 3 },
+                    '5': { 'Информатика': 5, 'Философия': 4 },
+                    '6': { 'Право': 3, 'Социология': 4 }
+                }
+            }
+        };
+
+        const app = new App(users, performance);
+        app.renderLoginForm();
+
+    </script>
+</body>
+</html>
