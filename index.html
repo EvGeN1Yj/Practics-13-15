@@ -10,27 +10,35 @@
             margin: 20px;
             padding: 20px;
         }
-        div {
+        table {
+            width: 100%;
+            border-collapse: collapse;
             margin-bottom: 20px;
         }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
         input {
-            margin: 5px 0;
+            width: 100%;
+            box-sizing: border-box;
         }
         button {
             margin-top: 10px;
             padding: 10px 20px;
             cursor: pointer;
         }
-        h1, h2, h3, h4 {
+        h1, h2, h3 {
             color: #333;
         }
     </style>
 </head>
 <body>
     <script>
-        // Основной JS-код для интерфейса сервиса электронной успеваемости студентов
-
-        // Класс для представления пользователя
         class User {
             constructor(username, password, role, info = null) {
                 this.username = username;
@@ -40,10 +48,13 @@
             }
         }
 
-        // Класс для управления успеваемостью
         class Performance {
             constructor() {
-                this.data = {};
+                this.data = JSON.parse(localStorage.getItem('performanceData')) || {};
+            }
+
+            saveData() {
+                localStorage.setItem('performanceData', JSON.stringify(this.data));
             }
 
             getStudentSessions(username) {
@@ -58,14 +69,30 @@
                     this.data[username].sessions[session] = {};
                 }
                 this.data[username].sessions[session][subject] = grade;
+                this.saveData();
             }
 
             reset() {
                 this.data = {};
+                this.saveData();
+            }
+
+            calculateAverage(username) {
+                const sessions = this.getStudentSessions(username);
+                let totalGrades = 0;
+                let gradeCount = 0;
+
+                for (const session in sessions) {
+                    for (const subject in sessions[session]) {
+                        totalGrades += sessions[session][subject];
+                        gradeCount++;
+                    }
+                }
+
+                return gradeCount > 0 ? (totalGrades / gradeCount).toFixed(2) : 'Нет данных';
             }
         }
 
-        // Класс для управления приложением
         class App {
             constructor(users, performance) {
                 this.users = users;
@@ -77,6 +104,7 @@
                 const user = this.users.find(u => u.username === username && u.password === password);
                 if (user) {
                     this.currentUser = user;
+                    localStorage.setItem('currentUser', JSON.stringify(user));
                     this.renderInterface();
                 } else {
                     alert('Неверный логин или пароль');
@@ -85,6 +113,7 @@
 
             logout() {
                 this.currentUser = null;
+                localStorage.removeItem('currentUser');
                 this.renderLoginForm();
             }
 
@@ -116,21 +145,33 @@
             renderStudentInterface() {
                 const studentData = this.performance.getStudentSessions(this.currentUser.username);
                 const studentInfo = this.currentUser.info;
+                const averageGrade = this.performance.calculateAverage(this.currentUser.username);
 
                 let gradesHtml = '';
                 for (const session in studentData) {
-                    gradesHtml += `<h3>Сессия ${session}</h3><ul>`;
+                    gradesHtml += `<h3>Сессия ${session}</h3>
+                    <table>
+                        <tr>
+                            <th>Предмет</th>
+                            <th>Оценка</th>
+                        </tr>`;
                     for (const subject in studentData[session]) {
-                        gradesHtml += `<li>${subject}: ${studentData[session][subject]}</li>`;
+                        gradesHtml += `
+                            <tr>
+                                <td>${subject}</td>
+                                <td>${studentData[session][subject]}</td>
+                            </tr>`;
                     }
-                    gradesHtml += '</ul>';
+                    gradesHtml += '</table>';
                 }
 
                 document.body.innerHTML = `
                     <div>
-                        <h1>Добро пожаловать, ${studentInfo.FIO}</h1>
-                        <p>Группа: ${studentInfo.group}</p>
-                        <p>Шифр: ${studentInfo.code}</p>
+                        <h1>Добро пожаловать!</h1>
+                        <p><strong>ФИО:</strong> ${studentInfo.FIO}</p>
+                        <p><strong>Группа:</strong> ${studentInfo.group}</p>
+                        <p><strong>Шифр:</strong> ${studentInfo.code}</p>
+                        <p><strong>Средний балл:</strong> ${averageGrade}</p>
                         <h2>Результаты</h2>
                         ${gradesHtml}
                         <button onclick="app.logout()">Выйти</button>
@@ -153,14 +194,24 @@
                     const grades = this.performance.getStudentSessions(student.username);
                     studentsHtml += `<div><h3>${student.info.FIO}</h3>`;
                     for (let session = 1; session <= 6; session++) {
-                        studentsHtml += `<h4>Сессия ${session}</h4><ul>`;
+                        studentsHtml += `
+                            <h4>Сессия ${session}</h4>
+                            <table>
+                                <tr>
+                                    <th>Предмет</th>
+                                    <th>Оценка</th>
+                                </tr>`;
                         subjects[session].forEach(subject => {
                             const grade = grades[session]?.[subject] || '';
                             studentsHtml += `
-                                <li>${subject}: <input data-student="${student.username}" data-session="${session}" data-subject="${subject}" value="${grade}"></li>
-                            `;
+                                <tr>
+                                    <td>${subject}</td>
+                                    <td>
+                                        <input type="number" min="2" max="5" data-student="${student.username}" data-session="${session}" data-subject="${subject}" value="${grade}">
+                                    </td>
+                                </tr>`;
                         });
-                        studentsHtml += '</ul>';
+                        studentsHtml += '</table>';
                     }
                     studentsHtml += '</div>';
                 }
@@ -183,7 +234,9 @@
                     const session = input.dataset.session;
                     const subject = input.dataset.subject;
                     const grade = parseInt(input.value);
-                    this.performance.updateGrade(student, session, subject, grade);
+                    if (grade >= 2 && grade <= 5) {
+                        this.performance.updateGrade(student, session, subject, grade);
+                    }
                 });
                 alert('Успеваемость сохранена');
             }
@@ -195,29 +248,21 @@
             }
         }
 
-        // Инициализация приложения
         const users = [
-            new User('student1', '1234', 'student', { FIO: 'Иван Иванович Иванов', group: '101', code: 'S123', grades: {} }),
+            new User('student1', '1234', 'student', { FIO: 'Иван Иванович Иванов', group: '101', code: 'S123' }),
             new User('teacher1', 'abcd', 'teacher')
         ];
 
         const performance = new Performance();
-        performance.data = {
-            'student1': {
-                sessions: {
-                    '1': { 'Математика': 4, 'Физика': 5 },
-                    '2': { 'Химия': 3, 'История': 4 },
-                    '3': { 'Литература': 5, 'Физкультура': 4 },
-                    '4': { 'Биология': 4, 'Экономика': 3 },
-                    '5': { 'Информатика': 5, 'Философия': 4 },
-                    '6': { 'Право': 3, 'Социология': 4 }
-                }
-            }
-        };
-
         const app = new App(users, performance);
-        app.renderLoginForm();
 
+        const savedUser = JSON.parse(localStorage.getItem('currentUser'));
+        if (savedUser) {
+            app.currentUser = savedUser;
+            app.renderInterface();
+        } else {
+            app.renderLoginForm();
+        }
     </script>
 </body>
 </html>
